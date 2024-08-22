@@ -1,19 +1,35 @@
+from typing import TypeAlias
+
 from torch.utils.data import Dataset
 import torchvision
+import xarray
+import numpy
+import torch
+
+# Could be Dataset of pandas DataFrame as far as I can see
+InputDataType: TypeAlias = xarray.Dataset
 
 
 class PlanktonDataset(Dataset):
-    def __init__(self, ds, output_path=None):
+    """
+    A image-based dataset.
+
+    Indexing the dataset using an integer key returns a tuple containing
+    (a) the raster, and (b) a torch.Tensor that has been resized to
+    the standard (256, 256, X).
+
+    Args:
+        An xarray.Dataset containing images with X format and Y fields
+    """
+    def __init__(self, ds: InputDataType):
         self.ds = ds
         self.n_images = self.ds.dims['concat_dim']
         self.img_ixs = self.ds.concat_dim.values
-        if output_path is not None:
-            self.output_path = output_path
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.n_images
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[numpy.ndarray, torch.Tensor]:
         im_raw = self.ds.sel(concat_dim=self.img_ixs[idx])
         imw = im_raw.image_width.values
         iml = im_raw.image_length.values

@@ -1,34 +1,38 @@
 import numpy as np
 import torch
 import torchvision
-from .data import PlanktonDataset
+from .dataset import PlanktonDataset
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-from .utils import PlanktonLabels
 import pooch
 import random
 
+label2_classes = ['copepod', 'detritus', 'noncopepod']
+label2_detritus = range(0, 3)
+label2_detritus_map = dict(zip(label2_detritus, label2_classes))
+
 class resnet50:
     def __init__(self, model_weights: dict = None, label_level=None):
-
+        
+        # ---- LABEL LEVEL
         if label_level is None:
             label_level = 'label2_detritus'
-
-        if model_weights is None:
-            model_weights = dict(url="doi:10.5281/zenodo.6143685/cop-non-detritus-20211215.pth",
-                             known_hash="md5:46fd1665c8b966e472152eb695d22ae3")
-
-        # ---- DOWNLOAD
-        self.model_weights = pooch.retrieve(url=model_weights['url'], known_hash=model_weights['known_hash'])
-
-        # ---- LABEL LEVEL
         self.labels_map = PlanktonLabels(experiment=label_level).labels()
         target_classes = len(self.labels_map.values())
-
+        
         # ---- LOAD PRETRAINED MODEL
         model = torchvision.models.resnet50(weights=None)
         num_ftrs = model.fc.in_features
         model.fc = torch.nn.Linear(num_ftrs, target_classes)
+
+
+
+        # ---- DOWNLOAD
+        if model_weights is None:
+            model_weights = dict(url="doi:10.5281/zenodo.6143685/cop-non-detritus-20211215.pth",
+                             known_hash="md5:46fd1665c8b966e472152eb695d22ae3")
+        self.model_weights = pooch.retrieve(url=model_weights['url'], known_hash=model_weights['known_hash'])
+
 
         # replace default weights by the fine-tune model
         model.load_state_dict(torch.load(self.model_weights, map_location=torch.device('cpu'), weights_only=True))  # path of your weights
