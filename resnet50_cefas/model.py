@@ -26,12 +26,12 @@ class resnet50:
         target_classes = len(self.labels_map.values())
 
         # ---- LOAD PRETRAINED MODEL
-        model = torchvision.models.resnet50(pretrained=False)
+        model = torchvision.models.resnet50(weights=None)
         num_ftrs = model.fc.in_features
         model.fc = torch.nn.Linear(num_ftrs, target_classes)
 
         # replace default weights by the fine-tune model
-        model.load_state_dict(torch.load(self.model_weights, map_location=torch.device('cpu')))  # path of your weights
+        model.load_state_dict(torch.load(self.model_weights, map_location=torch.device('cpu'), weights_only=True))  # path of your weights
 
         #initialise the model in evaluation mode
         self.pretrained_model = model
