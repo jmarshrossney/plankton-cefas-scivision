@@ -1,39 +1,53 @@
-from enum import IntEnum
 import logging
-from pathlib import Path
-from typing import TypeAlias
-from urllib.request import urlopen
 import zipfile
+from pathlib import Path
+from urllib.request import urlopen
 
-from PIL import Image
 import torch
+from PIL import Image
 from torchvision.transforms.v2.functional import pil_to_tensor, resize, to_dtype
 
 from .model import load_model
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ZENODO_URL = "https://zenodo.org/records/6143685/files/images.zip"
 IMAGES_DIR = Path(__file__).with_name("benchmark_images")
 IMAGES_ZIP = IMAGES_DIR / "images.zip"
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-# logger.setLevel(logging.INFO)
-
-
-class Labels(IntEnum):
-    """Labels for the three output classes, enumerated"""
-
-    copepod = 0
-    detritus = 1
-    non_copepod = 2
+CLASSES = ("copepod", "detritus", "non_copepod")
 
 
 class BenchmarkDataset(torch.utils.data.Dataset):
+    """
+    Wrapper for a directory of `.tif` RGB images.
+
+    The directory is expected to contain the 26 plankton images supplied by
+    the original authors and hosted here: https://zenodo.org/records/6143685
+
+    The dataset is accessed by an integer index, which returns a tuple containing
+        (a) a representation of the image as a float32 tensor, rescaled to [0, 1],
+            and interpolated such that the spatial dimensions are (256, 256)
+        (b) a string which is the correct class label
+        (c) the original PIL Image (for visualisation)
+        (d) the image file path (for sanity checking)
+
+    The labels are inferred from the file names, as in:
+        'copepod_X.tif'     -> 'copepod'
+        'detritus_X.tif'    -> 'detritus'
+        'non_copepod_X.tif' -> 'non_copepod'
+    """
+
     def __init__(self):
         super().__init__()
 
         files = list(IMAGES_DIR.glob("*.tif"))
+        if (n := len(files)) != 26:
+            logging.warning("Expected to find 26 images, but found %d" % n)
+
         labels = [file.stem[::-1].split("_", maxsplit=1)[1][::-1] for file in files]
+        assert all([label in CLASSES for label in set(labels)])
 
         images = []
         for file in files:
@@ -48,7 +62,7 @@ class BenchmarkDataset(torch.utils.data.Dataset):
         self._labels = labels
         self._images = images
 
-    def len(self) -> int:
+    def __len__(self) -> int:
         return len(self._labels)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, str, Image.Image, Path]:
@@ -69,8 +83,9 @@ class BenchmarkDataset(torch.utils.data.Dataset):
 
 
 def load_dataset() -> BenchmarkDataset:
-
-    # TODO: make robust to existence of zip but not folder, say
+    """
+    Wrapper for BenchmarkDataset which downloads and extracts data if required.
+    """
 
     # Download zipfile from Zenodo if it doesn't already exist
     if not IMAGES_DIR.exists():
@@ -93,10 +108,20 @@ def load_dataset() -> BenchmarkDataset:
 
 
 def main():
+    """
+    Benchmarks the CEFAS/Turing model on the 26-image dataset.
+
+    Currently this just loops over each image and prints the model prediction
+    alongside the correct class label.
+    """
 
     dataset = load_dataset()
     model = load_model()
 
+    print("Prediction, Correct")
+    print("-------------------")
+
+    # NOTE: can vmap the forward pass if tensors are the same size
     for inputs in dataset:
         tensor, label, _, _ = inputs
 
@@ -104,7 +129,7 @@ def main():
         probs = torch.softmax(model(tensor), dim=1)
 
         pred = int(torch.argmax(probs, dim=1))
-        print(pred, Labels(pred).name, label, getattr(Labels, label))
+        print(CLASSES[pred], label)
 
 
 if __name__ == "__main__":
