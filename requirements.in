@@ -2,4 +2,3 @@ numpy
 pooch
 torch
 torchvision
-xarray
