@@ -5,7 +5,7 @@ from torchvision.models.resnet import Bottleneck, ResNet
 WEIGHTS_URL = "doi:10.5281/zenodo.6143685/cop-non-detritus-20211215.pth"
 WEIGHTS_HASH = "md5:46fd1665c8b966e472152eb695d22ae3"
 
-def build_model() -> ResNet:
+def load_model(strip_final_layer: bool = False) -> ResNet:
     """
     Returns an instance of ResNet50 with weights from the CEFAS/Turing project.
     """
@@ -22,9 +22,10 @@ def build_model() -> ResNet:
     model.load_state_dict(weights)
     model.eval()
 
+    if strip_final_layer:
+        # TODO: maybe instead add a forward_hook to the final linear layer
+        # so that it returns inputs as well as outputs?
+        model.fc = torch.nn.Identity()
+
     return model
-
-
-if __name__ == "__main__":
-    build_model()
 

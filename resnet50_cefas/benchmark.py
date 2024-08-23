@@ -9,7 +9,7 @@ from PIL import Image
 import torch
 from torchvision.transforms.v2.functional import pil_to_tensor, resize, to_dtype
 
-from .model import build_model
+from .model import load_model
 
 Tensor: TypeAlias = torch.Tensor
 
@@ -99,7 +99,7 @@ def load_dataset() -> BenchmarkDataset:
 def main():
 
     dataset = load_dataset()
-    model = build_model()
+    model = load_model()
 
     for inputs in dataset:
         tensor, label, _, _ = inputs
