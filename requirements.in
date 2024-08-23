@@ -2,3 +2,4 @@ numpy
 pooch
 torch
 torchvision
+torchmetrics

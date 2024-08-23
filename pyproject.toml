@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "resnet50_cefas"
 version = "0.2.0"
 requires-python = ">=3.11"
-dependencies = ["numpy", "torch", "torchvision", "pooch"]
+dependencies = ["numpy", "torch", "torchvision", "torchmetrics", "pooch"]
 description = "This package supports the processing and analysis of plankton sample data"
 readme = "README.md"
 
