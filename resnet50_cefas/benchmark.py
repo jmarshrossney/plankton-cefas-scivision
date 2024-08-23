@@ -10,7 +10,6 @@ from urllib.request import urlopen
 import torch
 from PIL import Image
 from torchvision.transforms.v2.functional import pil_to_tensor, resize, to_dtype
-from torchmetrics import Accuracy, ConfusionMatrix, MetricCollection, Precision, Recall
 
 from .model import load_model
 
@@ -127,13 +126,24 @@ def load_dataset() -> BenchmarkDataset:
     return BenchmarkDataset()
 
 
+def accuracy(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Computes the classification accuracy."""
+    return (preds == targets).to(torch.float32).mean()
+
+
+def confusion_matrix(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Computes the confusion matrix."""
+    res = torch.zeros((3, 3), dtype=torch.int32)
+    for pred, targ in zip(preds, targets):
+        res[targ, pred] += 1
+    return res
+
+
 def main():
     """
     Benchmarks the CEFAS/Turing model on the 26-image dataset.
 
-    Computes the accuracy and confusion matrix, prints each of these to stdout,
-    and, if matplotlib is installed, saves an image of the confusion matrix to
-    `confusion_matrix.png`.
+    Computes the accuracy and confusion matrix, prints each of these to stdout.
 
     Currently this expects the images to have compatible dimensions so that
     the forward pass can be batched.
@@ -148,20 +158,17 @@ def main():
     outputs = model(inputs)
     preds = torch.softmax(outputs, dim=1)
 
-    acc = Accuracy(task="multiclass", num_classes=3)
-    print(f"Accuracy: {float(acc(preds, targets)):.2f}")
+    # Convert to one-hot (don't actually use softmax probs!)
+    preds = torch.argmax(preds, dim=1)
+    assert (
+        preds.shape == targets.shape
+    ), f"Mismatched sizes: {preds.shape} vs {targets.shape}"
 
-    cm = ConfusionMatrix(task="multiclass", num_classes=3)
-    print(f"Confusion matrix: {cm(preds, targets)}")
+    acc = accuracy(preds, targets)
+    cm = confusion_matrix(preds, targets)
 
-    try:
-        import matplotlib
-    except ImportError:
-        pass
-    else:
-        logger.info("Saving confusion matrix to confusion_matrix.png")
-        fig, _ = cm.plot(labels=Labels.as_tuple())
-        fig.savefig("confusion_matrix.png")
+    print(f"Accuracy: {float(acc):.2f}")
+    print(f"Confusion matrix:\n{cm}")
 
 
 if __name__ == "__main__":
