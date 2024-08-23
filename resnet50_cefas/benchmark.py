@@ -132,7 +132,8 @@ def main():
     Benchmarks the CEFAS/Turing model on the 26-image dataset.
 
     Computes the accuracy and confusion matrix, prints each of these to stdout,
-    and saves an image of the confusion matrix to `confusion_matrix.png`.
+    and, if matplotlib is installed, saves an image of the confusion matrix to
+    `confusion_matrix.png`.
 
     Currently this expects the images to have compatible dimensions so that
     the forward pass can be batched.
@@ -153,9 +154,14 @@ def main():
     cm = ConfusionMatrix(task="multiclass", num_classes=3)
     print(f"Confusion matrix: {cm(preds, targets)}")
 
-    logger.info("Saving confusion matrix to confusion_matrix.png")
-    fig, _ = cm.plot(labels=Labels.as_tuple())
-    fig.savefig("confusion_matrix.png")
+    try:
+        import matplotlib
+    except ImportError:
+        pass
+    else:
+        logger.info("Saving confusion matrix to confusion_matrix.png")
+        fig, _ = cm.plot(labels=Labels.as_tuple())
+        fig.savefig("confusion_matrix.png")
 
 
 if __name__ == "__main__":
