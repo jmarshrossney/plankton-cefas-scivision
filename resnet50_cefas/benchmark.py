@@ -11,19 +11,18 @@ from torchvision.transforms.v2.functional import pil_to_tensor, resize, to_dtype
 
 from .model import load_model
 
-Tensor: TypeAlias = torch.Tensor
-
 ZENODO_URL = "https://zenodo.org/records/6143685/files/images.zip"
 IMAGES_DIR = Path(__file__).with_name("benchmark_images")
 IMAGES_ZIP = IMAGES_DIR / "images.zip"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
+# logger.setLevel(logging.INFO)
 
 
 class Labels(IntEnum):
     """Labels for the three output classes, enumerated"""
+
     copepod = 0
     detritus = 1
     non_copepod = 2
@@ -34,11 +33,8 @@ class BenchmarkDataset(torch.utils.data.Dataset):
         super().__init__()
 
         files = list(IMAGES_DIR.glob("*.tif"))
-        labels = [
-            file.stem[::-1].split("_", maxsplit=1)[1][::-1]
-            for file in files
-        ]
-        
+        labels = [file.stem[::-1].split("_", maxsplit=1)[1][::-1] for file in files]
+
         images = []
         for file in files:
             with file.open("rb") as fp:
@@ -52,24 +48,24 @@ class BenchmarkDataset(torch.utils.data.Dataset):
         self._labels = labels
         self._images = images
 
-
     def len(self) -> int:
         return len(self._labels)
 
-    def __getitem__(self, idx: int) -> tuple[Tensor, str, Image.Image, Path]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str, Image.Image, Path]:
         file = self._files[idx]
         label = self._labels[idx]
         image = self._images[idx]
+
         tensor = to_dtype(
             pil_to_tensor(image),  # permutes HWC -> CHW
-            torch.float32, scale=True  # rescales [0, 255] -> [0, 1]
-        ).unsqueeze(0) # add batch dim
-        
+            torch.float32,
+            scale=True,  # rescales [0, 255] -> [0, 1]
+        ).unsqueeze(0)
+
+        # NOTE: copied from original, but do we really want to do this?
         tensor = resize(tensor, size=[256, 256])
 
         return tensor, label, image, file
-        
-
 
 
 def load_dataset() -> BenchmarkDataset:
@@ -103,7 +99,7 @@ def main():
 
     for inputs in dataset:
         tensor, label, _, _ = inputs
-        
+
         # NOTE: do we know that the outputs were softmaxed during training??
         probs = torch.softmax(model(tensor), dim=1)
 
@@ -113,7 +109,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
