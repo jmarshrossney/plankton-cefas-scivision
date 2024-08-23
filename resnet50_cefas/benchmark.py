@@ -127,14 +127,6 @@ def load_dataset() -> BenchmarkDataset:
     return BenchmarkDataset()
 
 
-def accuracy(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    preds = torch.argmax(preds, dim=1)
-    assert (
-        preds.shape == target.shape
-    ), f"Mismatched sizes: {preds.shape} vs {target.shape}"
-    return (preds == target).to(torch.float32).mean()
-
-
 def main():
     """
     Benchmarks the CEFAS/Turing model on the 26-image dataset.
