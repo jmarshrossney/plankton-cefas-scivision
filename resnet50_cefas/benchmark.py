@@ -1,3 +1,7 @@
+"""
+This module contains the setup and execution of a benchmark for the CEFAS/Turing model.
+"""
+
 import logging
 import zipfile
 from pathlib import Path
@@ -6,6 +10,7 @@ from urllib.request import urlopen
 import torch
 from PIL import Image
 from torchvision.transforms.v2.functional import pil_to_tensor, resize, to_dtype
+from torchmetrics import Accuracy, ConfusionMatrix, MetricCollection, Precision, Recall
 
 from .model import load_model
 
@@ -16,7 +21,19 @@ ZENODO_URL = "https://zenodo.org/records/6143685/files/images.zip"
 IMAGES_DIR = Path(__file__).with_name("benchmark_images")
 IMAGES_ZIP = IMAGES_DIR / "images.zip"
 
-CLASSES = ("copepod", "detritus", "non_copepod")
+from enum import IntEnum
+
+
+class Labels(IntEnum):
+    """Labels for the three output classes, enumerated"""
+
+    copepod = 0
+    detritus = 1
+    non_copepod = 2
+
+    @classmethod
+    def as_tuple(cls) -> tuple[str, str, str]:
+        return tuple(cls(i).name for i in range(3))
 
 
 class BenchmarkDataset(torch.utils.data.Dataset):
@@ -47,7 +64,9 @@ class BenchmarkDataset(torch.utils.data.Dataset):
             logging.warning("Expected to find 26 images, but found %d" % n)
 
         labels = [file.stem[::-1].split("_", maxsplit=1)[1][::-1] for file in files]
-        assert all([label in CLASSES for label in set(labels)])
+        assert all([label in Labels.as_tuple() for label in set(labels)])
+
+        labels_tensor = torch.tensor([getattr(Labels, label) for label in labels])
 
         images = []
         for file in files:
@@ -60,6 +79,7 @@ class BenchmarkDataset(torch.utils.data.Dataset):
 
         self._files = files
         self._labels = labels
+        self._labels_tensor = labels_tensor
         self._images = images
 
     def __len__(self) -> int:
@@ -67,14 +87,14 @@ class BenchmarkDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, str, Image.Image, Path]:
         file = self._files[idx]
-        label = self._labels[idx]
+        label = self._labels_tensor[idx]
         image = self._images[idx]
 
         tensor = to_dtype(
             pil_to_tensor(image),  # permutes HWC -> CHW
             torch.float32,
             scale=True,  # rescales [0, 255] -> [0, 1]
-        ).unsqueeze(0)
+        )
 
         # NOTE: copied from original, but do we really want to do this?
         tensor = resize(tensor, size=[256, 256])
@@ -107,29 +127,43 @@ def load_dataset() -> BenchmarkDataset:
     return BenchmarkDataset()
 
 
+def accuracy(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    preds = torch.argmax(preds, dim=1)
+    assert (
+        preds.shape == target.shape
+    ), f"Mismatched sizes: {preds.shape} vs {target.shape}"
+    return (preds == target).to(torch.float32).mean()
+
+
 def main():
     """
     Benchmarks the CEFAS/Turing model on the 26-image dataset.
 
-    Currently this just loops over each image and prints the model prediction
-    alongside the correct class label.
-    """
+    Computes the accuracy and confusion matrix, prints each of these to stdout,
+    and saves an image of the confusion matrix to `confusion_matrix.png`.
 
+    Currently this expects the images to have compatible dimensions so that
+    the forward pass can be batched.
+    """
     dataset = load_dataset()
     model = load_model()
 
-    print("Prediction, Correct")
-    print("-------------------")
+    inputs, targets, _, _ = list(zip(*dataset))
+    # NOTE: this only works when the dimensions are standardised
+    inputs, targets = map(torch.stack, [inputs, targets])
 
-    # NOTE: can vmap the forward pass if tensors are the same size
-    for inputs in dataset:
-        tensor, label, _, _ = inputs
+    outputs = model(inputs)
+    preds = torch.softmax(outputs, dim=1)
 
-        # NOTE: do we know that the outputs were softmaxed during training??
-        probs = torch.softmax(model(tensor), dim=1)
+    acc = Accuracy(task="multiclass", num_classes=3)
+    print(f"Accuracy: {float(acc(preds, targets)):.2f}")
 
-        pred = int(torch.argmax(probs, dim=1))
-        print(CLASSES[pred], label)
+    cm = ConfusionMatrix(task="multiclass", num_classes=3)
+    print(f"Confusion matrix: {cm(preds, targets)}")
+
+    logger.info("Saving confusion matrix to confusion_matrix.png")
+    fig, _ = cm.plot(labels=Labels.as_tuple())
+    fig.savefig("confusion_matrix.png")
 
 
 if __name__ == "__main__":
